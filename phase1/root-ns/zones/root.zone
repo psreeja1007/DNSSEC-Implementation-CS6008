@@ -1,0 +1,12 @@
+$TTL 86400
+@       IN SOA  root-ns. admin.root-ns. (
+                        2026101900 ; serial
+                        3600       ; refresh
+                        1800       ; retry
+                        604800     ; expire
+                        86400 )    ; minimum
+@       IN NS   root-ns.
+root-ns. IN A   172.16.3.10
+
+com.        IN NS   tld-ns.com.
+tld-ns.com. IN A    172.16.3.20
