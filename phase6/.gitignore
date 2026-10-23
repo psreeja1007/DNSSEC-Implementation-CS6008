@@ -1,0 +1,7 @@
+common/pki/*
+!common/pki/.gitkeep
+# built binary (grader rebuilds from source via the Makefile)
+attacker/interceptor
+# captured evidence artifacts
+evidence/*
+!evidence/.gitkeep
