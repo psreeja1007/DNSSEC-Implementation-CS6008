@@ -105,6 +105,8 @@ services:
     container_name: core-router
     hostname: core-router
     cap_add: [NET_ADMIN]
+    environment:
+      - INTERCEPT_MODE=${INTERCEPT_MODE:-false}
     sysctls:
         net.ipv4.ip_forward: "1"
     networks:
@@ -128,6 +130,8 @@ services:
     container_name: attacker
     hostname: attacker
     cap_add: [NET_ADMIN, NET_RAW]
+    sysctls:
+      net.ipv4.ip_forward: "1"
     environment:
       - INTERCEPT_MODE=${INTERCEPT_MODE:-false}
     networks:

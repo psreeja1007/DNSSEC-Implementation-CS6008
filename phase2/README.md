@@ -2,7 +2,8 @@
 
 Phase 2 carries over the Phase 1 DNS hierarchy and adds a rogue web server
 (`172.16.1.30`) and an attacker container (`172.16.2.100`) on the resolver
-subnet. The core router routes resolver-bound replies through the attacker.
+subnet. For the normal DNS path, resolver-bound replies are not diverted
+through the attacker.
 
 ## Current implementation status
 
@@ -11,23 +12,23 @@ The interceptor currently has two modes, selected by `INTERCEPT_MODE` in
 
 | Setting | Attacker mode | Behavior |
 | --- | --- | --- |
-| `INTERCEPT_MODE=false` | `normal` | Captures and relays DNS packets without modifying their contents. |
-| `INTERCEPT_MODE=true` | `intercept` | Captures and logs DNS packets, but does not relay or modify them. |
+| `INTERCEPT_MODE=false` | `normal` | Uses the normal DNS route; the attacker is not in the resolver reply path. |
+| `INTERCEPT_MODE=true` | `intercept` | Selects the experimental interceptor branch; it does not change the core-router route. |
 
 **Response forgery and resolver cache poisoning are not implemented.** In
-`intercept` mode, replies routed through the attacker are not forwarded, so
-queries that need an upstream response can time out. A cached resolver answer
-may still be returned. Do not expect `example.com` to resolve to the rogue
-server in either current mode.
+The core router does not install a route through the attacker. This keeps
+normal recursive lookups independent of the interceptor. The experimental
+interceptor branch is not part of the verified normal DNS path. Do not expect
+`example.com` to resolve to the rogue server when using normal mode.
 
 The resolver and authoritative name servers use their Phase 1 configuration.
-The Phase 2 attacker route is configured on `core-router`; inspect it with:
+Check the resolver route on `core-router`:
 
 ```powershell
 docker exec core-router ip route get 172.16.2.10
 ```
 
-When the diversion is active, the route output should show `via 172.16.2.100`.
+For normal DNS, the output should not show `via 172.16.2.100`.
 
 ## Deploy
 
@@ -54,16 +55,16 @@ Edit `INTERCEPT_MODE` in `.env`, then recreate the attacker container:
 INTERCEPT_MODE=false
 ```
 
-For transparent relay mode:
+For normal DNS mode:
 
 ```powershell
 docker compose up -d --build --force-recreate attacker
 docker logs attacker
 ```
 
-Set `INTERCEPT_MODE=true` in `.env` and run the same commands to select
-monitor-only mode. With the core-router diversion active, DNS queries may time
-out in this mode because the interceptor does not relay packets.
+Set `INTERCEPT_MODE=true` in `.env` and recreate the attacker to select
+monitor-only mode. The core router still does not divert resolver replies, so
+normal DNS remains available.
 
 ## Check DNS and web connectivity
 
