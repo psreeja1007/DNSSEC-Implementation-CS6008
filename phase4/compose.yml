@@ -37,6 +37,8 @@ services:
     build: ./tld-ns
     container_name: tld-ns
     hostname: tld-ns
+    environment:
+      - INSERT_CHILD_DS=${INSERT_CHILD_DS:-true}
     cap_add: [NET_ADMIN]
     security_opt:
       - apparmor:unconfined
