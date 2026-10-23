@@ -11,6 +11,8 @@ ZONEDIR=/etc/bind/zones
 ZONE=com
 cd "$ZONEDIR"
 
+rm -f /pki/com.ds 
+
 # --- Wait for domain-ns to publish its DS record (bounded wait) ---
 echo "[tld-ns] waiting for /pki/example.com.ds ..."
 i=0

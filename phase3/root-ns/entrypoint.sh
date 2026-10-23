@@ -10,6 +10,8 @@ ip route
 ZONEDIR=/etc/bind/zones
 cd "$ZONEDIR"
 
+rm -f /pki/root.key
+
 # --- Wait for tld-ns to publish its DS record (bounded wait) ---
 echo "[root-ns] waiting for /pki/com.ds ..."
 i=0

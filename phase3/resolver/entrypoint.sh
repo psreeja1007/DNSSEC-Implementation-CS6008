@@ -5,6 +5,8 @@ mkdir -p /run/named /var/cache/bind
 ip route add 172.16.3.0/24 via 172.16.2.3 2>/dev/null || true
 ip route add 172.16.1.0/24 via 172.16.2.2 2>/dev/null || true
 
+rm -f /pki/root-anchor.conf
+
 echo "[resolver] routes:"
 ip route
 

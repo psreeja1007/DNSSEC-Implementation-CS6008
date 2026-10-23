@@ -12,6 +12,8 @@ ZONEDIR=/etc/bind/zones
 ZONE=example.com
 cd "$ZONEDIR"
 
+rm -f /pki/example.com.ds 
+
 # --- DNSSEC: generate KSK/ZSK once; keys live in this container's own
 #     writable layer, never on the host, never committed. ---
 if ! ls "K${ZONE}.+013+"*.key >/dev/null 2>&1; then
