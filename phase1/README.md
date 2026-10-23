@@ -40,8 +40,17 @@ docker compose up -d
 docker compose ps
 ```
 
-All 8 containers should show as `running`. Check each one applied its
-static route(s) correctly:
+All 8 containers should show as `running`. Confirm the DNS containers
+are actually running BIND 9.20.x (the assignment's required version):
+
+```bash
+docker exec root-ns    named -v
+docker exec tld-ns     named -v
+docker exec domain-ns  named -v
+docker exec resolver   named -v
+```
+
+Then check each one applied its static route(s) correctly:
 
 ```bash
 docker logs root-ns      | grep -A3 routes
@@ -84,14 +93,21 @@ chain instead of a cached answer:
 ```bash
 docker exec resolver rndc flush
 
-# start capture on core-router in one terminal
-docker exec core-router tcpdump -i any -w /tmp/phase1-referral.pcap udp port 53 &
+# start capture on core-router as a background job
+$capture = Start-Job -ScriptBlock {
+    docker exec core-router tcpdump -i any -w /tmp/phase1-referral.pcap udp port 53
+}
 
-# trigger a fresh lookup from the client in another terminal
+# give tcpdump a moment to attach before triggering the lookup
+Start-Sleep -Seconds 1
+
+# trigger a fresh lookup from the client
 docker exec client dig example.com
 
 # stop the capture
 docker exec core-router pkill tcpdump
+Wait-Job $capture | Out-Null
+Remove-Job $capture
 
 # pull the capture out for Wireshark/tshark inspection
 docker cp core-router:/tmp/phase1-referral.pcap ./phase1-referral.pcap
@@ -111,8 +127,8 @@ docker exec resolver rndc flush   # clear resolver cache without a restart
 
 ## 5. Notes for the report
 
-- Keep the terminal output of §3.1–3.2 and the annotated capture from
-  §3.3 — these are the Phase 1 deliverables.
+- Keep the terminal output of §2's `named -v` check, §3.1–3.2, and the
+  annotated capture from §3.3 — these are the Phase 1 deliverables.
 - For the "what could an on-path node do" report question: note that
   every exchange you just captured was plaintext UDP with no
   authentication — any node on the resolver's path (like core-router's
