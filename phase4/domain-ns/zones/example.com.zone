@@ -1,0 +1,12 @@
+$TTL 86400
+@       IN SOA  domain-ns.example.com. admin.example.com. (
+                        2026101900 ; serial
+                        3600       ; refresh
+                        1800       ; retry
+                        604800     ; expire
+                        86400 )    ; minimum
+@                       IN NS   domain-ns.example.com.
+domain-ns.example.com.  IN A    172.16.3.30
+
+@       IN A    172.16.1.20
+www     IN A    172.16.1.20

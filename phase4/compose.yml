@@ -1,0 +1,150 @@
+name: cs6008-phase4
+
+networks:
+  client_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.16.1.0/24
+  resolver_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.16.2.0/24
+  auth_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.16.3.0/24
+
+services:
+
+  root-ns:
+    build: ./root-ns
+    container_name: root-ns
+    hostname: root-ns
+    cap_add: [NET_ADMIN]
+    security_opt:
+      - apparmor:unconfined
+    networks:
+      auth_net:
+        ipv4_address: 172.16.3.10
+    volumes:
+      - ./common/pki:/pki
+    tty: true
+
+  tld-ns:
+    build: ./tld-ns
+    container_name: tld-ns
+    hostname: tld-ns
+    cap_add: [NET_ADMIN]
+    security_opt:
+      - apparmor:unconfined
+    networks:
+      auth_net:
+        ipv4_address: 172.16.3.20
+    volumes:
+      - ./common/pki:/pki
+    tty: true
+
+  domain-ns:
+    build: ./domain-ns
+    container_name: domain-ns
+    hostname: domain-ns
+    cap_add: [NET_ADMIN]
+    security_opt:
+      - apparmor:unconfined
+    networks:
+      auth_net:
+        ipv4_address: 172.16.3.30
+    volumes:
+      - ./common/pki:/pki
+    tty: true
+
+  resolver:
+    build: ./resolver
+    container_name: resolver
+    hostname: resolver
+    cap_add: [NET_ADMIN]
+    security_opt:
+      - apparmor:unconfined
+    networks:
+      resolver_net:
+        ipv4_address: 172.16.2.10
+    volumes:
+      - ./common/pki:/pki
+    tty: true
+
+  client:
+    build: ./client
+    container_name: client
+    hostname: client
+    cap_add: [NET_ADMIN]
+    networks:
+      client_net:
+        ipv4_address: 172.16.1.10
+    volumes:
+      - ./common/pki:/pki:ro
+    tty: true
+
+  webserver:
+    build: ./webserver
+    container_name: webserver
+    hostname: webserver
+    networks:
+      client_net:
+        ipv4_address: 172.16.1.20
+    tty: true
+
+  edge-router:
+    build: ./edge-router
+    container_name: edge-router
+    hostname: edge-router
+    cap_add: [NET_ADMIN]
+    sysctls:
+        net.ipv4.ip_forward: "1"
+    networks:
+      client_net:
+        ipv4_address: 172.16.1.2
+      resolver_net:
+        ipv4_address: 172.16.2.2
+    tty: true
+
+  core-router:
+    build: ./core-router
+    container_name: core-router
+    hostname: core-router
+    cap_add: [NET_ADMIN]
+    environment:
+      - ATTACK_MODE=${ATTACK_MODE:-normal}
+    sysctls:
+        net.ipv4.ip_forward: "1"
+    networks:
+      resolver_net:
+        ipv4_address: 172.16.2.3
+      auth_net:
+        ipv4_address: 172.16.3.3
+    tty: true
+
+  rogue-web:
+    build: ./rogue-web
+    container_name: rogue-web
+    hostname: rogue-web
+    networks:
+      client_net:
+        ipv4_address: 172.16.1.30
+    tty: true
+
+  attacker:
+    build: ./attacker
+    container_name: attacker
+    hostname: attacker
+    cap_add: [NET_RAW]
+    sysctls:
+      net.ipv4.ip_forward: "0"
+    environment:
+      - ATTACK_MODE=${ATTACK_MODE:-normal} 
+    networks:
+      resolver_net:
+        ipv4_address: 172.16.2.100
+    tty: true
