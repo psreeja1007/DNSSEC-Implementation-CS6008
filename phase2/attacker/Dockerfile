@@ -1,9 +1,14 @@
 FROM ubuntu:25.04
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        build-essential libpcap-dev iproute2 iputils-ping tcpdump dnsutils && \
-    rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libpcap-dev \
+    libnetfilter-queue-dev \
+    iptables \
+    iproute2 \
+    dnsutils \
+    tcpdump \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY . /attacker
 WORKDIR /attacker

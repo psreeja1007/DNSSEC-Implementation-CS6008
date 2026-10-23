@@ -1,9 +1,8 @@
-CXX      := g++
+CXX := g++
 CXXFLAGS := -Wall -Wextra -std=c++17 -O2
-LDLIBS   := -lpcap
-
-TARGET   := interceptor
-SRC      := interceptor.cpp
+LDLIBS := -lpcap -lnetfilter_queue
+TARGET := interceptor
+SRC := interceptor.cpp
 
 .PHONY: all clean
 
