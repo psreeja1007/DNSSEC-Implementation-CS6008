@@ -4,17 +4,17 @@ set -e
 echo "[core-router] interfaces:"
 ip -4 addr show
 
-case "${ATTACK_MODE:-normal}" in
-    intercept|strip)
-        echo "[core-router] attack mode ${ATTACK_MODE}; diverting resolver-bound traffic via attacker"
+case "${INTERCEPT_MODE:-false}" in
+    true|TRUE|1|yes|YES)
+        echo "[core-router] diverting resolver-bound traffic via attacker"
         ip route replace 172.16.2.10/32 via 172.16.2.100
         ;;
-    normal)
+    false|FALSE|0|no|NO|"")
         echo "[core-router] normal routing; removing diversion"
         ip route del 172.16.2.10/32 2>/dev/null || true
         ;;
     *)
-        echo "[core-router] invalid ATTACK_MODE=${ATTACK_MODE}" >&2
+        echo "[core-router] invalid INTERCEPT_MODE=${INTERCEPT_MODE}" >&2
         exit 1
         ;;
 esac

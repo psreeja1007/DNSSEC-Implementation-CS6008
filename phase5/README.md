@@ -1,54 +1,55 @@
 # Phase 5 - DNSSEC Zone Walking
 
-Phase 5 is an independent copy of the Phase 4 lab. It reuses the signed
-root -> `.com` -> `example.com` hierarchy and the validating resolver. The
-child zone contains five extra internal hostnames. In the first run it uses
-NSEC denial, allowing an observer to follow the signed owner-name chain. In
-the second run it uses NSEC3, which replaces cleartext next-owner names with
-hashes and stops the same query-only walk.
+Phase 5 reuses the Phase 3 signed root -> `.com` -> `example.com` hierarchy
+and validating resolver. The Phase 3 deployment is otherwise unchanged: the
+resolver trusts the root KSK and validates the signed chain. Phase 5 adds
+undisclosed owner names to `example.com` and makes the child signer selectable
+between NSEC and NSEC3.
 
-The Compose project is `cs6008-phase5`, and containers have no fixed names, so
-Phase 5 can run alongside other phases without reusing their containers or
-networks. Run commands below from `phase5/`.
+The Compose project is `cs6008-phase5`; fixed container names have been
+removed so the Phase 3 lab can coexist. Run commands from `phase5/`.
 
-## 5.1 Deploy with walkable NSEC
+## 5.1 Deploy the signed Phase 3 hierarchy
 
-The default `.env` selects the walkable configuration:
+The `.env` defaults preserve the normal Phase 3 DNS path and choose walkable
+NSEC denial:
 
 ```dotenv
-ATTACK_MODE=normal
-INSERT_CHILD_DS=true
+INTERCEPT_MODE=false
 DENIAL_MODE=nsec
 ```
 
-Start the lab with fresh DNSSEC handoff files:
+Build and start the independent stack with fresh DS/trust-anchor handoff files:
 
 ```powershell
 docker compose down
 Remove-Item .\common\pki\example.com.ds, .\common\pki\com.ds, .\common\pki\root.key, .\common\pki\root-anchor.conf -ErrorAction SilentlyContinue
 docker compose up -d --build
 docker compose ps
-```
-
-Wait for the signer and trust chain to finish:
-
-```powershell
 docker compose logs domain-ns
 docker compose logs tld-ns
 docker compose logs root-ns
 docker compose logs resolver
 ```
 
-`domain-ns` should report `denial mode: nsec`; the child DS should be inserted
-into `com`, and the `com` DS into the root zone.
+The domain signer should report `denial mode: nsec`. The child DS should be
+inserted into `com`, the `com` DS into the root zone, and the resolver should
+install the root KSK trust anchor.
 
-The zone contains these owner names: `example.com`, `www`, `domain-ns`,
-`admin`, `dev`, `git`, `mail`, and `vpn`. The five internal labels are only in
-the zone file and are not published elsewhere as hints.
+In addition to the existing apex, `www`, and `domain-ns` names, the zone
+contains five internal labels that are not advertised elsewhere:
+
+```text
+admin.example.com.
+dev.example.com.
+git.example.com.
+mail.example.com.
+vpn.example.com.
+```
 
 ## 5.2 Verify authenticated denial
 
-Ask for an absent name and inspect the authenticated NSEC proof:
+Ask for an absent name and inspect its signed denial:
 
 ```powershell
 docker compose exec resolver rndc flush
@@ -56,15 +57,15 @@ docker compose exec client dig '@172.16.2.10' not-real.example.com A +dnssec +no
 docker compose exec client delv -a /pki/root-anchor.conf '@172.16.2.10' not-real.example.com A +rtrace
 ```
 
-Expect `NXDOMAIN`, the `ad` flag, and an NSEC plus RRSIG in the authority
-section. `delv` should report that the denial was fully validated.
+Expect `NXDOMAIN`, the `ad` flag, and NSEC plus RRSIG records in the authority
+section. `delv` should report a fully validated negative answer.
 
-## 5.3 Attack - walk the NSEC chain
+## 5.3 Walk the NSEC chain
 
-NSEC records are ordered links: each record exposes its cleartext owner and
-the next owner name. Start with only the known apex. Query a type that does not
-exist at each discovered owner (`TXT` here), read the next owner from the NSEC
-RDATA, and repeat until the chain returns to `example.com.`:
+An NSEC record exposes the current owner name and the next owner name in
+canonical DNS order. Starting only with the known apex, query a nonexistent
+type (`TXT`) at each owner and follow the NSEC next-owner field. The NSEC RDATA
+also gives the current owner:
 
 ```powershell
 docker compose exec client dig '@172.16.2.10' example.com TXT +dnssec +noall +comments +answer +authority
@@ -77,39 +78,34 @@ docker compose exec client dig '@172.16.2.10' vpn.example.com TXT +dnssec +noall
 docker compose exec client dig '@172.16.2.10' www.example.com TXT +dnssec +noall +comments +answer +authority
 ```
 
-Use the NSEC next-owner field to decide the next query; the order shown above
-is not required and is not a wordlist. The proof's NSEC owner also identifies
-the current owner. Stop as soon as the next-owner field returns to the apex.
-There are eight owner names including the known apex, so the complete walk
-uses eight queries (within the limit of names + 2). Do not use AXFR or guess
-candidate labels.
-
-The recovered set is:
+Follow the response, not this listing, to choose the next query. The chain
+observed in this zone is:
 
 ```text
-example.com.
-admin.example.com.
-dev.example.com.
-git.example.com.
-mail.example.com.
-vpn.example.com.
-www.example.com.
-domain-ns.example.com.
+example.com -> admin.example.com -> dev.example.com
+-> domain-ns.example.com -> git.example.com -> mail.example.com
+-> vpn.example.com -> www.example.com -> example.com
 ```
 
-## 5.4 Mitigation - reconfigure the signer for NSEC3
+Stop once the next-owner field returns to `example.com`. This recovers all
+eight owner names in eight queries, within the `number of names + 2` limit.
+The five previously undisclosed names are `admin`, `dev`, `git`, `mail`, and
+`vpn`. This procedure uses only the authenticated NSEC responses; do not use
+AXFR or a candidate-name wordlist.
 
-Change only the denial mode in `.env`:
+## 5.4 Reconfigure denial with NSEC3
+
+Change the denial mode in `.env`:
 
 ```dotenv
 DENIAL_MODE=nsec3
 NSEC3_SALT=a1b2c3d4
 ```
 
-`domain-ns/entrypoint.sh` now passes the BIND `dnssec-signzone -3 <salt>`
-option when `DENIAL_MODE=nsec3`; `-3` selects NSEC3. Rebuild the signed
-hierarchy from clean handoff files so the child is re-signed and all DS
-records and trust anchors correspond to the current keys:
+The Phase 3 signer still generates the same DNSSEC keys and publishes the
+child DS in the same way. The Phase 5-only change passes BIND's
+`dnssec-signzone -3 <salt>` option for the `example.com` child, selecting
+NSEC3. Re-sign the chain from fresh handoff files:
 
 ```powershell
 docker compose down
@@ -119,8 +115,8 @@ docker compose ps
 docker compose logs domain-ns
 ```
 
-The signer should log `denial mode: nsec3`. Verify authenticated denial still
-works:
+The domain signer should report `denial mode: nsec3`. Check that a nonexistent
+name still receives authenticated denial:
 
 ```powershell
 docker compose exec resolver rndc flush
@@ -128,34 +124,30 @@ docker compose exec client dig '@172.16.2.10' not-real.example.com A +dnssec +no
 docker compose exec client delv -a /pki/root-anchor.conf '@172.16.2.10' not-real.example.com A +rtrace
 ```
 
-Expect `NXDOMAIN`, `ad`, and signed NSEC3 proof records; `delv` should still
-report a fully validated denial. Then repeat the walk from the apex:
+Expect `NXDOMAIN`, `ad`, NSEC3/RRSIG records, and fully validated denial.
+Repeat a query starting from the known apex:
 
 ```powershell
 docker compose exec client dig '@172.16.2.10' example.com TXT +dnssec +noall +comments +answer +authority
 ```
 
-The authority section now contains NSEC3 hashes, not a cleartext next-owner
-name. There is no next hostname to use as the following query, so this
-query-only walk discovers none of the five hidden labels. Unlike NSEC, NSEC3
-does not provide a direct enumerable chain of plaintext owners. It is not
-absolute confidentiality: an attacker with likely candidate names can
-perform offline dictionary guesses against the hashes, especially when names
-are predictable.
+The proof contains hashed owner names and hashed next-owner values rather than
+the cleartext NSEC link. The same procedure therefore does not reveal a next
+hostname, and the walk recovers none of the five labels. NSEC3 is not absolute
+confidentiality: predictable names may still be tested using offline
+dictionary guesses against the hashes.
 
 ## 5.5 Report
 
-- List the eight owner names recovered, the starting apex query, and the
-  sequence of NSEC next-owner values and queries. Include the signed denial
-  output and resolver validation evidence.
-- The walk is enabled by the signer's default NSEC behavior (no NSEC3 option).
-  A signed NSEC record authenticates a cleartext link from one existing owner
-  to the next, making repeated queries a zone walk. Plain DNS does not include
-  those links in its negative answers.
-- The mitigation is NSEC3, selected by the exact
-  `dnssec-signzone -3 <salt>` signing option. It replaces cleartext owner
-  links with hashes while preserving authenticated nonexistence proofs.
-- The tradeoff is extra hash computation and larger NSEC3 records during zone
-  signing and validation. NSEC3 prevents the simple walk, but does not hide
-  names that can be guessed with offline dictionary attacks; the salt must be
-  configured and maintained as part of zone-signing operations.
+- Include the starting apex query, each NSEC owner/next-owner pair, the eight
+  recovered names, and the validated NXDOMAIN evidence.
+- Default NSEC signing makes the walk possible. Signed denial has to cover
+  arbitrary names not known when signatures are generated; NSEC does this
+  with a signed, cleartext link between existing owners. Ordinary DNS answers
+  do not publish that chain.
+- NSEC3 (`dnssec-signzone -3 <salt>`) replaces that link with hashes while
+  preserving authenticated denial.
+- The operator cost is additional hashing during signing and validation,
+  larger denial records, and salt lifecycle management. NSEC3 obstructs a
+  straightforward zone walk, but likely/predictable names can still be
+  recovered by dictionary guessing.

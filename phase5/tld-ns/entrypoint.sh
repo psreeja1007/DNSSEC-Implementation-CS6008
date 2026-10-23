@@ -26,13 +26,9 @@ until [ -s /pki/example.com.ds ]; do
 done
 
 # --- Insert the child's DS into our zone, once ---
-if [ "${INSERT_CHILD_DS:-true}" = "true" ]; then
-    if [ -s /pki/example.com.ds ] && ! grep -q "IN DS" "${ZONE}.zone"; then
-        { echo ""; cat /pki/example.com.ds; } >> "${ZONE}.zone"
-        echo "[tld-ns] inserted example.com DS into ${ZONE}.zone"
-    fi
-else
-    echo "[tld-ns] INSERT_CHILD_DS=false -- withholding example.com's DS (Run B)"
+if [ -s /pki/example.com.ds ] && ! grep -q "IN DS" "${ZONE}.zone"; then
+    { echo ""; cat /pki/example.com.ds; } >> "${ZONE}.zone"
+    echo "[tld-ns] inserted example.com DS into ${ZONE}.zone"
 fi
 
 # --- DNSSEC: generate KSK/ZSK once for com. ---
