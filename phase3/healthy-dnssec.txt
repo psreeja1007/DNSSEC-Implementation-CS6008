@@ -1,0 +1,32 @@
+Phase 3 baseline DNSSEC verification - 2026-10-23T15:54:41.6865759+05:30
+Attacker not started; INTERCEPT_MODE=false.
+
+=== dig +dnssec example.com ===
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 42455
+;; flags: qr rd ra ad; QUERY: 1, ANSWER: 2, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags: do; udp: 1232
+; COOKIE: 5685a98eccaaffff010000006adb35ea469277df2e8d1198 (good)
+;; ANSWER SECTION:
+example.com.		86354	IN	A	172.16.1.20
+example.com.		86354	IN	RRSIG	A 13 2 86400 20261122092004 20261023092004 16192 example.com. 6slI7VDwYS2cXrjVWNfvYvbYbzeIpmfgiW3Qjxtr/dbwrag2ctzmK2HC +u1BRDaXV7i+If97CG+R48j/iVJjPA==
+
+;; Query time: 0 msec
+;; SERVER: 172.16.2.10#53(172.16.2.10) (UDP)
+;; WHEN: Fri Oct 23 10:24:42 UTC 2026
+;; MSG SIZE  rcvd: 191
+
+
+=== delv chain validation ===
+; fully validated
+example.com.		86354	IN	A	172.16.1.20
+example.com.		86354	IN	RRSIG	A 13 2 86400 20261122092004 20261023092004 16192 example.com. 6slI7VDwYS2cXrjVWNfvYvbYbzeIpmfgiW3Qjxtr/dbwrag2ctzmK2HC +u1BRDaXV7i+If97CG+R48j/iVJjPA==
+
+=== client HTTP fetch ===
+HTTP status: 200; response body contains the REAL-server marker.
+
+=== core-router normal route ===
+172.16.2.10 dev eth0 src 172.16.2.3 uid 0 
+    cache 

@@ -28,5 +28,5 @@ esac
 echo "[attacker] intercept enabled: ${INTERCEPT_MODE:-false}"
 echo "[attacker] mode: ${mode}"
 
-# sysctl -w net.ipv4.ip_forward=1
+sysctl -w net.ipv4.ip_forward=1
 exec ./interceptor "${mode}"

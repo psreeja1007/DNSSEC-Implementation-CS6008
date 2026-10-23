@@ -1,0 +1,2 @@
+common/pki/*
+!common/pki/.gitkeep
