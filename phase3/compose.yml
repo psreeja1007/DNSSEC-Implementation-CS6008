@@ -139,9 +139,9 @@ services:
     build: ./attacker
     container_name: attacker
     hostname: attacker
-    cap_add: [NET_ADMIN, NET_RAW]
+    cap_add: [NET_RAW]
     sysctls:
-      net.ipv4.ip_forward: "1"
+      net.ipv4.ip_forward: "0"
     environment:
       - INTERCEPT_MODE=${INTERCEPT_MODE:-false}
     networks:

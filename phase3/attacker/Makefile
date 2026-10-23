@@ -1,6 +1,6 @@
 CXX := g++
 CXXFLAGS := -Wall -Wextra -std=c++17 -O2
-LDLIBS := -lpcap -lnetfilter_queue
+LDLIBS := -lpcap
 TARGET := interceptor
 SRC := interceptor.cpp
 
